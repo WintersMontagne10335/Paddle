@@ -26,7 +26,6 @@ bool ConcatOpInferSymbolicShape(
   const auto &shape_data_list =
       shape_analysis->GetShapeOrDataForValue(operand_source)
           .dyn_cast<symbol::TensorListShapeOrDataDimExprs>();
-
   CHECK(op->operand_source(1).defining_op()->isa<paddle::dialect::FullOp>());
 
   int64_t axis = op->operand_source(1)
@@ -39,10 +38,34 @@ bool ConcatOpInferSymbolicShape(
   size_t rank = shape_data_list[0].shape().size();
   axis = axis >= 0 ? axis : std::max(int64_t(0), int64_t(axis + rank));
 
-  if (shape_data_list[0].data().has_value()) {
+  bool has_value = true;
+
+  for (auto &shape_data : shape_data_list) {
+    if (!shape_data.data().has_value()) {
+      has_value = false;
+      break;
+    }
+  }
+
+  if (has_value) {
     if (rank == 1) {
+      // ExprVec data;
+      // VLOG(6) << shape_data_list[0].data().value();
+      // VLOG(6) << "111111111111";
+      // VLOG(6) <<shape_data_list.size();
+      // for(auto& shape_data:shape_data_list){
+      //   VLOG(6) << "222222222222";
+      //   shape_data.data();
+      //   VLOG(6) << "3333333333333";
+      //   VLOG(6) <<shape_data.data().value();
+      //   VLOG(6) << "4444444444444";
+      //   for (auto& expr : shape_data.data().value()) {
+      //     data.emplace_back(expr);
+      //   }
+      // }
       ExprVec data = details::GetExprVecFromData(
           shape_analysis->GetShapeOrDataForValue(operand_source));
+
       const std::vector<symbol::DimExpr> shape{std::int64_t(data.size())};
       symbol::ShapeOrDataDimExprs shape_data{
           symbol::TensorShapeOrDataDimExprs(shape, data)};
@@ -68,7 +91,6 @@ bool ConcatOpInferSymbolicShape(
 
     return true;
   }
-
   const std::vector<symbol::DimExpr> &out_dims = [&] {
     std::vector<symbol::DimExpr> out_dims = shape_data_list[0].shape();
     for (size_t i = 0; i < rank; ++i) {
@@ -86,7 +108,6 @@ bool ConcatOpInferSymbolicShape(
 
   symbol::ShapeOrDataDimExprs shape_data{
       symbol::TensorShapeOrDataDimExprs(out_dims)};
-
   pir::Value res = op->result(0);
   shape_analysis->SetShapeOrDataForValue(res, shape_data);
 

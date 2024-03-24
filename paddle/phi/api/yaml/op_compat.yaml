@@ -2392,6 +2392,7 @@
     condition : Condition
   outputs :
     out : Out
+  interfaces : paddle::dialect::InferSymbolicShapeInterface
 
 - op : norm
   backward : norm_grad

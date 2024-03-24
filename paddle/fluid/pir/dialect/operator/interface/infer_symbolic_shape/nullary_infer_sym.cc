@@ -205,6 +205,7 @@ bool FullOpInferSymbolicShape(pir::Operation *op,
 
 bool FullIntArrayOpInferSymbolicShape(
     pir::Operation *op, pir::ShapeConstraintIRAnalysis *shape_analysis) {
+  VLOG(6) << "1111111111111111111";
   const auto &attributes = op->attributes();
   pir::Attribute attr_value = attributes.at("value");
   const auto &vec = attr_value.dyn_cast<pir::ArrayAttribute>().AsVector();
@@ -222,7 +223,7 @@ bool FullIntArrayOpInferSymbolicShape(
 
   symbol::ShapeOrDataDimExprs shape_data{
       symbol::TensorShapeOrDataDimExprs(shape, data)};
-
+  VLOG(6) << data;
   pir::Value res = op->result(0);
   shape_analysis->SetShapeOrDataForValue(res, shape_data);
   return true;

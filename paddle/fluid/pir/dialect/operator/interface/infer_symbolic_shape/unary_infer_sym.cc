@@ -330,6 +330,119 @@ bool MinOpInferSymbolicShape(pir::Operation *op,
   return true;
 }
 
+bool NonzeroOpInferSymbolicShape(
+    pir::Operation *op, pir::ShapeConstraintIRAnalysis *shape_analysis) {
+  const auto &x_shape_or_data =
+      shape_analysis->GetShapeOrDataForValue(op->operand_source(0));
+  const auto &x_shape = x_shape_or_data.shape();
+  const auto &x_data = x_shape_or_data.data();
+
+  PADDLE_ENFORCE_GE(
+      x_shape.size(),
+      1UL,
+      phi::errors::InvalidArgument(
+          "Input(x) should have number of dimension at least 1."));
+
+  PADDLE_ENFORCE_EQ(
+      x_data.has_value(),
+      false,
+      phi::errors::InvalidArgument(
+          "InferSymbolicShape of NonzeroOp only support input with "
+          "value now."));
+
+  std::vector<symbol::DimExpr> x_data_value = x_data.value();
+
+  // std::int64_t nonzero_num=0;
+
+  // for(auto x_data_value_i : x_data_value){
+  //   if(static_cast<bool>(x_data_value_i.Get<double>())){
+  //     nonzero_num++;
+  //   }
+  // }
+
+  // auto out_shape=x_shape;
+  // out_shape.insert(out_shape.begin(), nonzero_num);
+
+  auto out_shape = x_shape;
+  out_shape.insert(out_shape.begin(), -1);
+
+  symbol::ShapeOrDataDimExprs shape_data{
+      symbol::TensorShapeOrDataDimExprs(out_shape)};
+  shape_analysis->SetShapeOrDataForValue(op->result(0), shape_data);
+  return true;
+
+  // std::vector<symbol::DimExpr> squeeze_dims_sym;
+
+  // std::vector<int> squeeze_dims;
+  // for (auto squeeze_dim : squeeze_dims_sym) {
+  //   IR_ENFORCE(squeeze_dim.Has<std::int64_t>(),
+  //              "in SqueezeOpInferSymbolicShape, axes must be known int type,
+  //              " "but got: %s", symbol::ToString(squeeze_dim));
+  //   squeeze_dims.emplace_back(
+  //       static_cast<int>(squeeze_dim.Get<std::int64_t>()));
+  // }
+
+  // // output
+  // const symbol::TensorListShapeOrDataDimExprs &output_shape_data_list = [&] {
+  //   const auto &GetSum = [&](const auto &dim_exprs, const auto &Filter) {
+  //     symbol::DimExpr sum{0};
+  //     for (const auto &dim_expr : dim_exprs) {
+  //       if (Filter(dim_expr)) {
+  //         sum = sum + dim_expr;
+  //       }
+  //     }
+  //     return sum;
+  //   };
+  //   const auto &All = [&](const auto &dim_exprs, const auto &Cond) {
+  //     for (const auto &dim_expr : dim_exprs) {
+  //       if (!Cond(dim_expr)) {
+  //         return false;
+  //       }
+  //     }
+  //     return true;
+  //   };
+  //   const auto &IsNotMinusOne = [&](const symbol::DimExpr &dim_expr) {
+  //     if (dim_expr.isa<int64_t>()) {
+  //       return dim_expr.dyn_cast<int64_t>() != static_cast<int64_t>(-1);
+  //     }
+  //     return true;
+  //   };
+  //   const auto &sum_exclude_minus_one = GetSum(sections_sym, IsNotMinusOne);
+
+  //   const bool &all_sections_sym_not_minus_one =
+  //       All(sections_sym, IsNotMinusOne);
+  //   if (all_sections_sym_not_minus_one) {
+  //     shape_analysis->CreateDimExprBuilder().CstrEq(x_dims_sym[axis],
+  //                                                   sum_exclude_minus_one);
+  //   }
+
+  //   symbol::TensorListShapeOrDataDimExprs shape_data_list;
+  //   std::vector<symbol::DimExpr> output_dims_sym = x_dims_sym;
+  //   if (!all_sections_sym_not_minus_one && sections_sym.size() == 1) {
+  //     VLOG(3) << "[SplitOp]-1 is the only split section. The output shape is
+  //     "
+  //                "identical to the input shape.";
+  //     shape_data_list.push_back(
+  //         symbol::TensorShapeOrDataDimExprs(output_dims_sym));
+  //     return shape_data_list;
+  //   }
+  //   for (uint32_t idx = 0; idx < sections_sym.size(); idx++) {
+  //     const auto &section_sym = sections_sym[idx];
+  //     output_dims_sym[axis] = IsNotMinusOne(section_sym)
+  //                                 ? section_sym
+  //                                 : x_dims_sym[axis] - sum_exclude_minus_one;
+
+  //     shape_data_list.push_back(
+  //         symbol::TensorShapeOrDataDimExprs(output_dims_sym));
+  //   }
+  //   return shape_data_list;
+  // }();
+
+  // shape_analysis->SetShapeOrDataForValue(
+  //     op->result(0), symbol::ShapeOrDataDimExprs{output_shape_data_list});
+  // return true;
+}
+
 bool PadOpInferSymbolicShape(pir::Operation *op,
                              pir::ShapeConstraintIRAnalysis *shape_analysis) {
   PADDLE_THROW(phi::errors::Unimplemented(
@@ -377,6 +490,8 @@ symbol::ShapeOrDataDimExprs CreateShapeOrDataForXShape(
     const symbol::ShapeOrDataDimExprs &x_shape) {
   const std::vector<symbol::DimExpr> result = [&] {
     std::vector<symbol::DimExpr> new_x_dims;
+    VLOG(6) << x_shape.shape().size();
+    VLOG(6) << x_shape.shape();
     new_x_dims.reserve(x_shape.shape().size() + 1);
     new_x_dims.push_back(symbol::DimExpr{0});
     new_x_dims.insert(
@@ -388,10 +503,12 @@ symbol::ShapeOrDataDimExprs CreateShapeOrDataForXShape(
 
 bool ReshapeOpInferSymbolicShape(
     pir::Operation *op, pir::ShapeConstraintIRAnalysis *shape_analysis) {
+  VLOG(6) << "000";
   pir::Value operand_source = op->operand_source(0);
   if (shape_analysis->GetShapeOrDataForValue(operand_source)
           .data()
           .has_value()) {
+    VLOG(6) << "111";
     const symbol::ShapeOrDataDimExprs &operand_shape_or_data =
         shape_analysis->GetShapeOrDataForValue(operand_source);
     shape_analysis->SetShapeOrDataForValue(op->result(0),
@@ -431,14 +548,16 @@ bool ReshapeOpInferSymbolicShape(
   const std::vector<symbol::DimExpr> out_dims = [&] {
     const auto &original_shape =
         shape_analysis->GetShapeOrDataForValue(op->operand_source(0)).shape();
-
+    VLOG(6) << original_shape;
     const auto &numel =
         GetProduct(original_shape, [](const auto &) { return true; });
-
+    VLOG(6) << numel;
+    VLOG(6) << "operand_shape_or_data" << operand_shape_or_data;
     ExprVec target_shape = details::GetExprVecFromData(operand_shape_or_data);
+    VLOG(6) << target_shape;
     const auto &product_exclude_minus_one =
         GetProduct(target_shape, IsNotMinusOne);
-
+    VLOG(6) << product_exclude_minus_one;
     const auto &input_dims = target_shape;
 
     std::vector<symbol::DimExpr> out_dims;
@@ -450,7 +569,7 @@ bool ReshapeOpInferSymbolicShape(
       out_dim_expr = IsZero(input_dims[i]) ? original_shape[i] : out_dim_expr;
       out_dims.emplace_back(out_dim_expr);
     }
-
+    VLOG(6) << out_dims;
     return out_dims;
   }();
 
@@ -482,6 +601,7 @@ bool Reshape_OpInferSymbolicShape(
 
 bool ShapeOpInferSymbolicShape(pir::Operation *op,
                                pir::ShapeConstraintIRAnalysis *shape_analysis) {
+  VLOG(6) << "666666666666666666666";
   const symbol::ShapeOrDataDimExprs &operand_shape_or_data =
       shape_analysis->GetShapeOrDataForValue(op->operand_source(0));
   const auto &out_data = operand_shape_or_data.shape();
